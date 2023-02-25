@@ -35,7 +35,6 @@ app.get('/', (req, res) => {
 });
 
 app.route('/api/users').post((req, res) => {
-  console.log(req.body);
   let username = req.body.username;
   User.exists({ username: username.toString() }, (error, result) => {
     if (error) return console.log(error);
@@ -45,7 +44,10 @@ app.route('/api/users').post((req, res) => {
       });
       user.save((err, data) => {
         if (err) return console.log(err);
-        return res.json(data);
+        return res.json({
+          username: data.username,
+          _id: data._id
+        });
       })
     } else {
       User.find({ username: username.toString() }, (err, data) => {
@@ -60,13 +62,17 @@ app.route('/api/users').post((req, res) => {
 }).get((req, res) => {
   User.find((err, data) => {
     if (err) console.log(err);
+    data.map((item) => {
+      return {
+        username: item.username,
+        _id: item._id
+      }
+    });
     return res.json(data);
   });
 });
 
 app.post('/api/users/:id/exercises', (req, res, next) => {
-  console.log(req.body);
-  console.log(req.params);
   req.body.id = req.params.id;
   if (typeof req.body.date === `undefined`) {
     req.body.date = new Date().toDateString();
@@ -76,28 +82,81 @@ app.post('/api/users/:id/exercises', (req, res, next) => {
   }
   next();
 }, (req, res) => {
-  User.findById(req.body.id.toString(),(err,dat)=>{
-    if(err) return console.log(err);
-    let exercise = new Exercise({
-    username: dat.username,
-    description: req.body.description,
-    duration: parseInt(req.body.duration),
-    date: req.body.date,
-    userid: req.body.id
-  });
-  exercise.save((err, data) => {
+  User.findById(req.body.id.toString(), (err, dat) => {
     if (err) return console.log(err);
-    let resjson = {
-      _id: req.body.id,
-      username: data.username,
-      date: data.date,
-      duration: parseInt(data.duration),
-      description: data.description
+    let exercise = new Exercise({
+      username: dat.username,
+      description: req.body.description,
+      duration: parseInt(req.body.duration),
+      date: req.body.date,
+      userid: req.body.id
+    });
+    exercise.save((err, data) => {
+      if (err) return console.log(err);
+      let resjson = {
+        _id: req.body.id,
+        username: data.username,
+        date: data.date,
+        duration: parseInt(data.duration),
+        description: data.description
+      }
+      console.log(resjson);
+      return res.json(resjson);
+    });
+  });
+});
+
+app.get('/api/users/:id/logs', (req, res) => {
+  console.log(req.params);
+  console.log(req.query);
+  let id = req.params.id;
+  Exercise.find({ userid: id.toString() }, (err, data) => {
+    if (err) return console.log(err);
+    let log = [];
+    for (var i = 0; i < data.length; i++) {
+      log.push({
+        description: data[i].description,
+        duration: parseInt(data[i].duration),
+        date: new Date(data[i].date).valueOf()
+      });
+    }
+    if (typeof req.query.from !== `undefined`) {
+      from = new Date(req.query.from).valueOf();
+      log.filter((item) => {
+        return item.date >= from;
+      });
+    }
+    if (typeof req.query.to !== `undefined`) {
+      to = new Date(req.query.to).valueOf();
+      log.filter((item) => {
+        return item.date <= to;
+      });
+    }
+    count = log.length;
+    if (typeof req.query.limit !== `undefined`) {
+      limit = parseInt(req.query.limit);
+      log = log.sort((a,b)=>{
+        return b.date - a.date
+      });
+      log = log.slice(0, limit);
+    }
+    log = log.map((item) => {
+      date = new Date(item.date).toDateString();
+      return {
+        description: item.description,
+        duration: parseInt(item.duration),
+        date: date
+      };
+    });
+    resjson = {
+      _id: id,
+      username: data[0].username,
+      count: count,
+      log: log
     }
     console.log(resjson);
     return res.json(resjson);
   });
- });
 });
 
 const listener = app.listen(process.env.PORT || 3000, () => {
